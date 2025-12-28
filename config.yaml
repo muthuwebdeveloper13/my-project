@@ -1,0 +1,23 @@
+# config.yaml
+dataset:
+  path: "data/raw/dataset2.csv"
+  delimiter: ","
+  encoding: "utf-8"
+
+preprocessing:
+  handle_missing: "mean"
+  remove_outliers: false
+  outlier_method: "iqr"
+  normalize: true
+  method: "zscore"
+  use_columns: null
+  exclude_columns: []
+  plot_raw_data: true
+  figure_size: [10, 6]
+
+clustering:
+  n_components: 3
+  covariance_type: "full"
+  max_iter: 100
+  tolerance: 1e-3
+  random_state: 42
