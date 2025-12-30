@@ -1,6 +1,6 @@
 # config.yaml
 dataset:
-  path: "data/raw/dataset2.csv"
+  path: "data/raw/Mall_Customers.csv"
   delimiter: ","
   encoding: "utf-8"
 
