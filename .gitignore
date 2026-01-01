@@ -1,7 +1,14 @@
+# Ignore virtual environment
 venv/
+
+# Ignore Python cache
 __pycache__/
 *.pyc
 
+# Ignore large raw data files
 data/raw/*.csv
 data/raw/**/*.csv
 data/raw/**/*.zip
+
+# Ignore processed datasets
+data/processed/*.csv
