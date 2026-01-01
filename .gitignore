@@ -5,10 +5,11 @@ venv/
 __pycache__/
 *.pyc
 
-# Ignore large raw data files
-data/raw/*.csv
-data/raw/**/*.csv
-data/raw/**/*.zip
-
-# Ignore processed datasets
+# Ignore preprocessed/large data files
 data/processed/*.csv
+data/processed/**/*.csv
+
+# Optional: ignore raw CSVs you don't want to push
+# data/raw/*.csv
+# data/raw/**/*.csv
+# data/raw/**/*.zip
