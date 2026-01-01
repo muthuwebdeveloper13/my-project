@@ -13,3 +13,6 @@ data/processed/**/*.csv
 # data/raw/*.csv
 # data/raw/**/*.csv
 # data/raw/**/*.zip
+
+# Ignore outputs/results
+outputs/
