@@ -98,44 +98,6 @@ def main():
         os.makedirs("outputs/models", exist_ok=True)
         initializer.save_parameters("outputs/models/initialized_params.npy")
 
-        # ==================================================
-        # MODULE 3: EXPECTATION STEP (E-STEP)
-        # ==================================================
-        print("\n" + "=" * 50)
-        print("MODULE 3: EXPECTATION STEP (E-STEP)")
-        print("=" * 50)
-
-        e_step = GMMExpectation()
-        responsibilities, log_likelihood = e_step.run_e_step(
-            X,
-            params["means"],
-            params["covariances"],
-            params["weights"]
-        )
-
-        print("✅ E-Step completed")
-        print(f"Responsibilities shape: {responsibilities.shape}")
-        print(f"Log-Likelihood        : {log_likelihood:.4f}")
-
-        np.save("outputs/models/responsibilities.npy", responsibilities)
-
-        # ==================================================
-        # MODULE 4: MAXIMIZATION STEP (M-STEP)
-        # ==================================================
-        print("\n" + "=" * 50)
-        print("MODULE 4: MAXIMIZATION STEP (M-STEP)")
-        print("=" * 50)
-
-        m_step = GMMMaximization(reg_covar=1e-6)
-        updated_params = m_step.run_m_step(X, responsibilities)
-
-        print("✅ M-Step completed")
-        print(f"Updated weights: {updated_params['weights'].round(3)}")
-
-        np.save("outputs/models/updated_params.npy", updated_params)
-
-        print("\n🎉 ONE FULL EM ITERATION COMPLETED SUCCESSFULLY")
-
     except Exception as e:
         print(f"❌ Error during execution: {e}")
         import traceback
