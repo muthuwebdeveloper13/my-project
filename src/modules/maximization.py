@@ -1,75 +1,113 @@
-# src/modules/maximization.py
 import numpy as np
-
+from typing import Tuple, Dict
+from src.modules.expectation import GMMExpectation  # for log-likelihood
 
 class GMMMaximization:
     """
-    Module 4: Maximization Step (M-Step)
-    Updates GMM parameters using responsibilities
+    Module 4: Maximization Step (M-Step) for Gaussian Mixture Model (GMM)
+    ---------------------------------------------------------------------
+    Updates GMM parameters based on responsibilities γ(z_nk)
     """
 
-    def __init__(self, reg_covar=1e-6):
+    def __init__(self, eps: float = 1e-9):
+        self.eps = eps  # Numerical stability
+
+    # --------------------------------------------------
+    # Update Means μ_k
+    # --------------------------------------------------
+    def update_means(self, X: np.ndarray, gamma: np.ndarray) -> np.ndarray:
         """
-        reg_covar: small value added to diagonal for numerical stability
+        Args:
+            X     : (N, D) data matrix
+            gamma : (N, K) responsibilities
+        Returns:
+            means : (K, D)
         """
-        self.reg_covar = reg_covar
+        N_k = gamma.sum(axis=0)  # shape (K,)
+        means = (gamma.T @ X) / (N_k[:, np.newaxis] + self.eps)
+        return means
 
-    def run_m_step(self, X, responsibilities):
+    # --------------------------------------------------
+    # Update Covariances Σ_k
+    # --------------------------------------------------
+    def update_covariances(self, X: np.ndarray, gamma: np.ndarray, means: np.ndarray) -> np.ndarray:
         """
-        Perform M-step of EM algorithm
-
-        Parameters
-        ----------
-        X : ndarray of shape (n_samples, n_features)
-            Input data
-        responsibilities : ndarray of shape (n_samples, n_components)
-            Posterior probabilities from E-step
-
-        Returns
-        -------
-        params : dict
-            Updated GMM parameters
+        Args:
+            X     : (N, D)
+            gamma : (N, K)
+            means : (K, D)
+        Returns:
+            covariances : (K, D, D)
         """
+        N, D = X.shape
+        K = gamma.shape[1]
+        covariances = np.zeros((K, D, D))
 
-        n_samples, n_features = X.shape
-        n_components = responsibilities.shape[1]
+        for k in range(K):
+            diff = X - means[k]  # (N, D)
+            weighted_diff = diff.T * gamma[:, k]  # (D, N)
+            covariances[k] = (weighted_diff @ diff) / (gamma[:, k].sum() + self.eps)
+            # Numerical stability
+            covariances[k] += np.eye(D) * self.eps
 
-        # Effective number of points per cluster
-        Nk = responsibilities.sum(axis=0)  # shape (K,)
+        return covariances
 
-        # ===============================
-        # Update weights
-        # ===============================
-        weights = Nk / n_samples
+    # --------------------------------------------------
+    # Update Mixture Weights π_k
+    # --------------------------------------------------
+    def update_weights(self, gamma: np.ndarray) -> np.ndarray:
+        """
+        Args:
+            gamma : (N, K)
+        Returns:
+            weights : (K,)
+        """
+        N = gamma.shape[0]
+        weights = gamma.sum(axis=0) / N
+        return weights
 
-        # ===============================
-        # Update means
-        # ===============================
-        means = np.zeros((n_components, n_features))
-        for k in range(n_components):
-            means[k] = np.sum(
-                responsibilities[:, k][:, np.newaxis] * X,
-                axis=0
-            ) / Nk[k]
-
-        # ===============================
-        # Update covariances
-        # ===============================
-        covariances = np.zeros((n_components, n_features, n_features))
-
-        for k in range(n_components):
-            diff = X - means[k]
-            weighted_diff = responsibilities[:, k][:, np.newaxis] * diff
-
-            covariances[k] = (
-                weighted_diff.T @ diff
-            ) / Nk[k]
-
-            # Regularization for numerical stability
-            covariances[k] += self.reg_covar * np.eye(n_features)
-
-        return {
-            "weights": weights,
+    # --------------------------------------------------
+    # Compute Log-Likelihood (for convergence check)
+    # --------------------------------------------------
+    def compute_log_likelihood(
+        self,
+        X: np.ndarray,
+        means: np.ndarray,
+        covariances: np.ndarray,
+        weights: np.ndarray
+    ) -> float:
+        """
+        Uses EStep to compute log-likelihood
+        """
+        e_step = GMMExpectation(eps=self.eps)
+        params = {
+            "n_components": means.shape[0],
             "means": means,
-            "covariances": covariances
+            "covariances": covariances,
+            "weights": weights
         }
+        return e_step.compute_log_likelihood(X, params)
+
+    # --------------------------------------------------
+    # Full M-Step Wrapper
+    # --------------------------------------------------
+    def run_m_step(
+        self,
+        X: np.ndarray,
+        gamma: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+        """
+        Perform full M-Step.
+
+        Returns:
+            means       : (K, D)
+            covariances : (K, D, D)
+            weights     : (K,)
+            log_likelihood : float
+        """
+        means = self.update_means(X, gamma)
+        covariances = self.update_covariances(X, gamma, means)
+        weights = self.update_weights(gamma)
+        log_likelihood = self.compute_log_likelihood(X, means, covariances, weights)
+
+        return means, covariances, weights, log_likelihood

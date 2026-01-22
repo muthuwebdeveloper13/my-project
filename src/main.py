@@ -1,145 +1,115 @@
-# src/main.py
 import sys
 import os
 import numpy as np
-from dataclasses import asdict
 
-# Fix Python path
+# -----------------------------
+# Ensure project root is in path
+# -----------------------------
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.config import Config
-from src.modules.data_processing import DataPreprocessor
-from src.modules.initialization import initialize_gmm_from_data
-from src.modules.expectation import GMMExpectation
-from src.modules.maximization import GMMMaximization
+# -----------------------------
+# Module imports
+# -----------------------------
+from modules.data_processing import DataPreprocessor
+from modules.initialization import GMMInitializer
+from modules.expectation import GMMExpectation
+from modules.maximization import GMMMaximization
+from config import Config
+
 
 def main():
     print("📋 Loading configuration...")
+    config = Config.load("config.yaml")
+    config.validate()
+    print("✅ Configuration loaded successfully")
 
-    # --------------------------------------------------
-    # Load & validate configuration
-    # --------------------------------------------------
-    try:
-        config = Config.load("config.yaml")
-        config.validate()
-        print("✅ Configuration loaded successfully!")
-    except Exception as e:
-        print(f"❌ Configuration error: {e}")
-        return
+    # ==================================================
+    # MODULE 1: DATA PREPROCESSING
+    # ==================================================
+    print("\n" + "=" * 60)
+    print("MODULE 1: DATA PREPROCESSING")
+    print("=" * 60)
 
-    try:
-        # ==================================================
-        # MODULE 1: DATA COLLECTION & PRE-PROCESSING
-        # ==================================================
-        print("\n" + "=" * 50)
-        print("MODULE 1: DATA PREPROCESSING")
-        print("=" * 50)
+    preprocessor = DataPreprocessor(config)
+    data, numerical_cols, categorical_cols = preprocessor.get_preprocessed_data()
 
-        preprocessor = DataPreprocessor(config)
+    os.makedirs("data/processed", exist_ok=True)
+    preprocessed_path = "data/processed/preprocessed_data.csv"
+    data.to_csv(preprocessed_path, index=False)
+    print(f"✅ Preprocessed data saved: {preprocessed_path}")
 
-        data, numerical_cols, categorical_cols = preprocessor.get_preprocessed_data()
+    # ==================================================
+    # MODULE 2: GMM INITIALIZATION
+    # ==================================================
+    print("\n" + "=" * 60)
+    print("MODULE 2: GMM PARAMETER INITIALIZATION")
+    print("=" * 60)
 
-        # --------------------------------------------------
-        # Meaningful summary (exam friendly)
-        # --------------------------------------------------
-        print("\n📊 Preprocessing Summary")
-        print(f"   → Total samples      : {data.shape[0]}")
-        print(f"   → Total features     : {data.shape[1]}")
-        print(f"   → Numerical features : {numerical_cols}")
-        print(f"   → Ignored features   : {categorical_cols}")
+    X = data[numerical_cols].values
+    initializer = GMMInitializer(random_state=42)
+    params = initializer.initialize_all(
+        X=X,
+        K=config.clustering.n_components,
+        mean_method="kmeans",
+        cov_method="sample",
+        weight_method="uniform"
+    )
 
-        # Show example of Z-score understanding
-        print("\n📐 Normalization Check (Z-score example)")
-        example_col = numerical_cols[0]
-        print(f"   Feature : {example_col}")
-        print(f"   Mean ≈ {data[example_col].mean():.4f}")
-        print(f"   Std  ≈ {data[example_col].std():.4f}")
-        print("   (Mean ≈ 0 and Std ≈ 1 confirms Z-score normalization)")
+    os.makedirs("outputs/models", exist_ok=True)
+    gmm_params_path = "outputs/models/gmm_initialized_params.npy"
+    np.save(gmm_params_path, params)
+    print(f"✅ GMM parameters saved: {gmm_params_path}")
 
-        # --------------------------------------------------
-        # Save processed data
-        # --------------------------------------------------
-        os.makedirs("data/processed", exist_ok=True)
-        data.to_csv("data/processed/preprocessed_data.csv", index=False)
-        print("\n💾 Preprocessed data saved to data/processed/preprocessed_data.csv")
+    # ==================================================
+    # MODULES 3 + 4: EM ALGORITHM LOOP
+    # ==================================================
+    print("\n" + "=" * 60)
+    print("RUNNING EM ALGORITHM (E-STEP + M-STEP)")
+    print("=" * 60)
 
-        print("\n✅ DATA IS READY FOR GMM (Initialization → E-Step → M-Step)")
+    e_step = GMMExpectation()
+    m_step = GMMMaximization()
 
-    except Exception as e:
-        print("\n❌ Error during execution:")
-        print(e)
+    max_iter = config.clustering.max_iterations
+    tol = config.clustering.tolerance
+    prev_log_likelihood = -np.inf
 
-        # ==================================================
-        # MODULE 2: GMM INITIALIZATION
-        # ==================================================
-        print("\n" + "=" * 50)
-        print("MODULE 2: GMM INITIALIZATION")
-        print("=" * 50)
-
-        X = data[numerical_cols].values
-        print(f"📊 GMM Input Shape: {X.shape}")
-
-        config_dict = asdict(config)
-        initializer, params = initialize_gmm_from_data(X, config_dict)
-
-        print("✅ GMM Initialized")
-        print(f"Means shape       : {params['means'].shape}")
-        print(f"Covariances shape : {params['covariances'].shape}")
-        print(f"Weights           : {params['weights'].round(3)}")
-
-        if X.shape[1] >= 2:
-            initializer.visualize_initialization(
-                X,
-                feature_indices=(0, 1),
-                title="GMM Initialization",
-                save_path="outputs/plots/gmm_initialization.png"
-            )
-
-        os.makedirs("outputs/models", exist_ok=True)
-        initializer.save_parameters("outputs/models/initialized_params.npy")
-
-        # ==================================================
-        # MODULE 3: EXPECTATION STEP (E-STEP)
-        # ==================================================
-        print("\n" + "=" * 50)
-        print("MODULE 3: EXPECTATION STEP (E-STEP)")
-        print("=" * 50)
-
-        e_step = GMMExpectation()
-        responsibilities, log_likelihood = e_step.run_e_step(
+    for iteration in range(1, max_iter + 1):
+        # -------- E-STEP --------
+        gamma, log_likelihood = e_step.run_e_step(
             X,
             params["means"],
             params["covariances"],
             params["weights"]
         )
 
-        print("✅ E-Step completed")
-        print(f"Responsibilities shape: {responsibilities.shape}")
-        print(f"Log-Likelihood        : {log_likelihood:.4f}")
+        # -------- M-STEP --------
+        means, covariances, weights, log_likelihood = m_step.run_m_step(X, gamma)
+        params.update({"means": means, "covariances": covariances, "weights": weights})
 
-        np.save("outputs/models/responsibilities.npy", responsibilities)
+        print(f"Iteration {iteration:03d} - Log-likelihood: {log_likelihood:.6f}")
 
-        # ==================================================
-        # MODULE 4: MAXIMIZATION STEP (M-STEP)
-        # ==================================================
-        print("\n" + "=" * 50)
-        print("MODULE 4: MAXIMIZATION STEP (M-STEP)")
-        print("=" * 50)
+        # -------- Convergence Check --------
+        if abs(log_likelihood - prev_log_likelihood) < tol:
+            print(f"✅ Convergence reached at iteration {iteration}")
+            break
+        prev_log_likelihood = log_likelihood
 
-        m_step = GMMMaximization(reg_covar=1e-6)
-        updated_params = m_step.run_m_step(X, responsibilities)
+    # ==================================================
+    # SAVE FINAL PARAMETERS AND RESPONSIBILITIES
+    # ==================================================
+    os.makedirs("outputs/final", exist_ok=True)
+    np.save("outputs/final/gmm_final_params.npy", params)
+    np.save("outputs/final/responsibilities.npy", gamma)
+    with open("outputs/final/log_likelihood.txt", "w") as f:
+        f.write(f"{log_likelihood}\n")
 
-        print("✅ M-Step completed")
-        print(f"Updated weights: {updated_params['weights'].round(3)}")
-
-        np.save("outputs/models/updated_params.npy", updated_params)
-
-        print("\n🎉 ONE FULL EM ITERATION COMPLETED SUCCESSFULLY")
-
-    except Exception as e:
-        print(f"❌ Error during execution: {e}")
-        import traceback
-        traceback.print_exc()
+    print("\n✅ EM Algorithm Completed Successfully")
+    print(f"Final log-likelihood: {log_likelihood:.6f}")
+    print(f"Final parameters saved: outputs/final/gmm_final_params.npy")
+    print(f"Responsibilities saved: outputs/final/responsibilities.npy")
+    print("🚀 READY FOR NEXT MODULE: VISUALIZATION OR CLUSTER ASSIGNMENT")
 
 
 if __name__ == "__main__":

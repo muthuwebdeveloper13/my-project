@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-
 class DataPreprocessor:
     def __init__(self, config):
         self.config = config
@@ -15,7 +14,6 @@ class DataPreprocessor:
     def load_data(self):
         path = Path(self.config.dataset.path)
         self.data = pd.read_csv(path)
-
         print("✅ Data loaded successfully")
         print(f"   → Dataset shape: {self.data.shape}")
         print(f"   → Columns: {list(self.data.columns)}")
@@ -54,7 +52,6 @@ class DataPreprocessor:
     def create_features(self):
         self.numerical_cols = self.data.select_dtypes(include=[np.number]).columns.tolist()
         self.categorical_cols = self.data.select_dtypes(exclude=[np.number]).columns.tolist()
-
         self.data = self.data[self.numerical_cols]
 
         print("✅ Features created (Numerical only for GMM)")
@@ -67,28 +64,19 @@ class DataPreprocessor:
     def normalize_features(self):
         means = self.data.mean()
         stds = self.data.std()
-
         self.data = (self.data - means) / stds
         self.data = self.data.fillna(0)
 
         print("✅ Features normalized using Z-score")
-        print("   Z-score formula: z = (x − μ) / σ")
-
-        # Show example (first feature, first value)
         col = self.data.columns[0]
-        example_z = self.data[col].iloc[0]
-
         print(f"   → Example feature : {col}")
-        print(f"   → Mean (μ)        : {means[col]:.4f}")
-        print(f"   → Std (σ)         : {stds[col]:.4f}")
-        print(f"   → First Z-score   : {example_z:.4f}")
+        print(f"   → First Z-score   : {self.data[col].iloc[0]:.4f}")
 
         return self.data
 
     # -------------------------------------------------
     def visualize_raw_data(self):
-        print("📊 Visualizing data distribution (for GMM suitability)")
-
+        print("📊 Visualizing data distribution")
         self.data.hist(figsize=(10, 6))
         plt.suptitle("Feature Distributions (After Z-score Normalization)")
         plt.tight_layout()
@@ -111,5 +99,4 @@ class DataPreprocessor:
         self.create_features()
         self.normalize_features()
         self.visualize_raw_data()
-
         return self.data, self.numerical_cols, self.categorical_cols
