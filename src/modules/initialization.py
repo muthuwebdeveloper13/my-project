@@ -1,86 +1,81 @@
+# ========================
+# File: initialization.py
+# ========================
+
 import numpy as np
 from sklearn.cluster import KMeans
 
 class GMMInitializer:
-    def __init__(self, random_state: int = 42):
-        self.random_state = random_state
+    """
+    Module 2: Initialization of GMM Parameters
+    """
+
+    def __init__(self, data):
+        self.data = data.values if hasattr(data, 'values') else data
+        self.N, self.D = self.data.shape
         self.K = None
         self.means = None
         self.covariances = None
         self.weights = None
 
-    # Set Number of Components
-    def set_num_components(self, K: int):
+    def set_num_components(self, K):
         if not isinstance(K, int) or K <= 0:
             raise ValueError("K must be a positive integer")
         self.K = K
-        print(f"✔ Number of GMM components set to K = {self.K}")
+        print(f"✅ Number of clusters (K) set to: {self.K}")
+        return self.K
 
-    # Initialize Means
-    def init_means(self, X: np.ndarray, method: str = "kmeans"):
+    def init_means(self, method="kmeans"):
         if self.K is None:
-            raise ValueError("K not set. Call set_num_components(K) first.")
+            raise ValueError("Set number of clusters first using set_num_components(K)")
 
-        if method == "kmeans":
-            kmeans = KMeans(n_clusters=self.K, random_state=self.random_state, n_init=10)
-            kmeans.fit(X)
+        print("Initializing means...")
+        if method == "random":
+            indices = np.random.choice(self.N, self.K, replace=False)
+            self.means = self.data[indices]
+            print("✔ Means initialized randomly")
+        elif method == "kmeans":
+            kmeans = KMeans(n_clusters=self.K, n_init=10, random_state=42)
+            kmeans.fit(self.data)
             self.means = kmeans.cluster_centers_
-        elif method == "random":
-            indices = np.random.choice(X.shape[0], self.K, replace=False)
-            self.means = X[indices]
+            print("✔ Means initialized using K-Means")
         else:
-            raise ValueError("method must be 'kmeans' or 'random'")
+            raise ValueError("Method must be 'kmeans' or 'random'")
 
-        print("✔ Means initialized")
+        print("   Means shape:", self.means.shape)
+        print("   First 2 mean vectors:\n", self.means[:2])
         return self.means
 
-    # Initialize Covariances
-    def init_covariances(self, X: np.ndarray, method: str = "identity"):
-        if self.K is None:
-            raise ValueError("K not set. Call set_num_components(K) first.")
-
-        n_features = X.shape[1]
-        self.covariances = np.zeros((self.K, n_features, n_features))
-
+    def init_covariances(self, method="identity"):
+        print("Initializing covariance matrices...")
+        self.covariances = []
         if method == "identity":
-            for k in range(self.K):
-                self.covariances[k] = np.eye(n_features)
+            for _ in range(self.K):
+                self.covariances.append(np.eye(self.D))
+            print("✔ Covariances set as identity matrices")
         elif method == "sample":
-            kmeans = KMeans(n_clusters=self.K, random_state=self.random_state, n_init=10)
-            labels = kmeans.fit_predict(X)
-
-            for k in range(self.K):
-                cluster_data = X[labels == k]
-                if len(cluster_data) > 1:
-                    self.covariances[k] = np.cov(cluster_data.T) + np.eye(n_features) * 1e-6
-                else:
-                    self.covariances[k] = np.eye(n_features)
+            sample_cov = np.cov(self.data.T)
+            for _ in range(self.K):
+                self.covariances.append(sample_cov)
+            print("✔ Covariances set as sample covariance")
         else:
-            raise ValueError("method must be 'identity' or 'sample'")
+            raise ValueError("Covariance method must be 'identity' or 'sample'")
 
-        print("✔ Covariances initialized")
+        self.covariances = np.array(self.covariances)
+        print("   Covariance shape:", self.covariances.shape)
         return self.covariances
 
-    # Initialize Weights
-    def init_weights(self, method: str = "uniform"):
-        if self.K is None:
-            raise ValueError("K not set. Call set_num_components(K) first.")
-        if method != "uniform":
-            raise ValueError("Only 'uniform' initialization supported")
+    def init_weights(self):
+        print("Initializing mixture weights...")
         self.weights = np.ones(self.K) / self.K
-        print("✔ Weights initialized")
+        print("✔ Weights initialized uniformly")
+        print("   Weights:", self.weights)
         return self.weights
 
-    # Initialize All
-    def initialize_all(self, X, K, mean_method="kmeans", cov_method="identity", weight_method="uniform"):
+    def initialize_all(self, K, mean_method="kmeans", cov_method="identity"):
         self.set_num_components(K)
-        self.init_means(X, mean_method)
-        self.init_covariances(X, cov_method)
-        self.init_weights(weight_method)
-
-        return {
-            "n_components": self.K,
-            "means": self.means,
-            "covariances": self.covariances,
-            "weights": self.weights
-        }
+        self.init_means(mean_method)
+        self.init_covariances(cov_method)
+        self.init_weights()
+        print("\n🎯 GMM parameters ready for EM algorithm")
+        return self.means, self.covariances, self.weights

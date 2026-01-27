@@ -1,23 +1,19 @@
-# config.yaml
 dataset:
   path: "data/raw/Online-Retail.csv"
   delimiter: ","
   encoding: "utf-8"
 
 preprocessing:
-  handle_missing: "mean"
+  handle_missing: "mean"     # mean, median, mode, drop
   remove_outliers: false
-  outlier_method: "iqr"
+  outlier_method: "iqr"      # iqr, zscore
   normalize: true
-  method: "zscore"
-  use_columns: null
-  exclude_columns: []
+  method: "zscore"           # zscore, minmax
   plot_raw_data: true
   figure_size: [10, 6]
 
 clustering:
   n_components: 3
-  covariance_type: "full"
-  max_iter: 100
-  tolerance: 1e-3
+  max_iterations: 100
+  tolerance: 0.001
   random_state: 42
