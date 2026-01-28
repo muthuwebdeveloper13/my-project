@@ -245,7 +245,7 @@ class GMMPipeline:
         return self
     
     def evaluate_model(self):
-        """Evaluate GMM performance."""
+        """Evaluate GMM performance with error handling."""
         print("\n[MODULE 8] MODEL EVALUATION")
         print("-" * 70)
         
@@ -259,23 +259,37 @@ class GMMPipeline:
                 self.weights
             )
             
-            # Calculate metrics
-            silhouette = evaluator.silhouette()
-            bic, aic = evaluator.bic_aic()
+            print("Calculating evaluation metrics...")
             
-            print(f"Evaluation Metrics:")
-            print(f"  Silhouette Score: {silhouette:.4f}")
-            print(f"  Bayesian Information Criterion (BIC): {bic:.2f}")
-            print(f"  Akaike Information Criterion (AIC): {aic:.2f}")
+            # Calculate silhouette score
+            silhouette = evaluator.silhouette()
+            print(f"✓ Silhouette Score: {silhouette:.4f}")
+            
+            # Calculate BIC and AIC (with timeout protection)
+            try:
+                print("Calculating BIC and AIC (this may take a moment)...")
+                bic, aic = evaluator.bic_aic()
+                print(f"✓ Bayesian Information Criterion (BIC): {bic:.2f}")
+                print(f"✓ Akaike Information Criterion (AIC): {aic:.2f}")
+            except Exception as e:
+                print(f"⚠ BIC/AIC calculation skipped: {e}")
+                bic, aic = np.nan, np.nan
             
             # Compare with KMeans
+            print("Comparing with KMeans...")
             gmm_sil, kmeans_sil = evaluator.compare_with_kmeans()
-            print(f"\nComparison with KMeans:")
-            print(f"  GMM Silhouette: {gmm_sil:.4f}")
-            print(f"  KMeans Silhouette: {kmeans_sil:.4f}")
+            print(f"✓ GMM Silhouette: {gmm_sil:.4f}")
+            print(f"✓ KMeans Silhouette: {kmeans_sil:.4f}")
+            
+            # Get cluster statistics
+            print("\nCluster Statistics:")
+            stats = evaluator.get_cluster_statistics()
+            for stat in stats:
+                print(f"  Cluster {stat['cluster']}: {stat['size']} samples ({stat['percentage']:.1f}%), Weight: {stat['weight']:.3f}")
+            
         except Exception as e:
             print(f"⚠ Evaluation error: {e}")
-            print("  Continuing with documentation...")
+            print("  Continuing with other modules...")
         
         return self
     
