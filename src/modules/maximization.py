@@ -1,75 +1,85 @@
-# src/modules/maximization.py
-import numpy as np
+# =========================
+# File: maximization.py
+# =========================
 
+import numpy as np
+from modules.expectation import GMMExpectation
 
 class GMMMaximization:
     """
-    Module 4: Maximization Step (M-Step)
-    Updates GMM parameters using responsibilities
+    Module 4: Maximization Step (M-Step) for Gaussian Mixture Model (GMM)
+    Updates means, covariances, and mixture weights based on responsibilities
     """
 
-    def __init__(self, reg_covar=1e-6):
+    def __init__(self, eps=1e-9):
+        self.eps = eps  # Numerical stability
+
+    # -----------------------------
+    # Update Means μ_k
+    # -----------------------------
+    def update_means(self, X, gamma):
         """
-        reg_covar: small value added to diagonal for numerical stability
+        X: (N, D)
+        gamma: (N, K)
+        Returns: means (K, D)
         """
-        self.reg_covar = reg_covar
+        N_k = gamma.sum(axis=0)  # shape (K,)
+        means = (gamma.T @ X) / (N_k[:, np.newaxis] + self.eps)
+        return means
 
-    def run_m_step(self, X, responsibilities):
+    # -----------------------------
+    # Update Covariances Σ_k
+    # -----------------------------
+    def update_covariances(self, X, gamma, means):
         """
-        Perform M-step of EM algorithm
-
-        Parameters
-        ----------
-        X : ndarray of shape (n_samples, n_features)
-            Input data
-        responsibilities : ndarray of shape (n_samples, n_components)
-            Posterior probabilities from E-step
-
-        Returns
-        -------
-        params : dict
-            Updated GMM parameters
+        X: (N, D)
+        gamma: (N, K)
+        means: (K, D)
+        Returns: covariances (K, D, D)
         """
-
-        n_samples, n_features = X.shape
-        n_components = responsibilities.shape[1]
-
-        # Effective number of points per cluster
-        Nk = responsibilities.sum(axis=0)  # shape (K,)
-
-        # ===============================
-        # Update weights
-        # ===============================
-        weights = Nk / n_samples
-
-        # ===============================
-        # Update means
-        # ===============================
-        means = np.zeros((n_components, n_features))
-        for k in range(n_components):
-            means[k] = np.sum(
-                responsibilities[:, k][:, np.newaxis] * X,
-                axis=0
-            ) / Nk[k]
-
-        # ===============================
-        # Update covariances
-        # ===============================
-        covariances = np.zeros((n_components, n_features, n_features))
-
-        for k in range(n_components):
+        N, D = X.shape
+        K = gamma.shape[1]
+        covariances = np.zeros((K, D, D))
+        for k in range(K):
             diff = X - means[k]
-            weighted_diff = responsibilities[:, k][:, np.newaxis] * diff
+            weighted_diff = diff.T * gamma[:, k]
+            covariances[k] = (weighted_diff @ diff) / (gamma[:, k].sum() + self.eps)
+            covariances[k] += np.eye(D) * self.eps  # numerical stability
+        return covariances
 
-            covariances[k] = (
-                weighted_diff.T @ diff
-            ) / Nk[k]
+    # -----------------------------
+    # Update Weights π_k
+    # -----------------------------
+    def update_weights(self, gamma):
+        """
+        gamma: (N, K)
+        Returns: weights (K,)
+        """
+        N = gamma.shape[0]
+        weights = gamma.sum(axis=0) / N
+        return weights
 
-            # Regularization for numerical stability
-            covariances[k] += self.reg_covar * np.eye(n_features)
+    # -----------------------------
+    # Compute Log-Likelihood (using E-Step)
+    # -----------------------------
+    def compute_log_likelihood(self, X, means, covariances, weights):
+        """
+        Uses E-Step module to compute log-likelihood
+        """
+        e_step = GMMExpectation(eps=self.eps)
+        log_likelihood = e_step.compute_log_likelihood(X, means, covariances, weights)
+        return log_likelihood
 
-        return {
-            "weights": weights,
-            "means": means,
-            "covariances": covariances
-        }
+    # -----------------------------
+    # Full M-Step wrapper
+    # -----------------------------
+    def run_m_step(self, X, gamma):
+        """
+        Runs full M-Step: update parameters and return log-likelihood
+        Returns: means, covariances, weights, log_likelihood
+        """
+        means = self.update_means(X, gamma)
+        covariances = self.update_covariances(X, gamma, means)
+        weights = self.update_weights(gamma)
+        log_likelihood = self.compute_log_likelihood(X, means, covariances, weights)
+        return means, covariances, weights, log_likelihood
