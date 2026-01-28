@@ -1,12 +1,16 @@
+import os as os_module
 import sys
-import os
 import pandas as pd
 import numpy as np
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os_module.path.dirname(os_module.path.abspath(__file__)))
+sys.path.append(os_module.path.dirname(os_module.path.dirname(os_module.path.abspath(__file__))))
 
+# Create necessary directories
+os_module.makedirs("outputs/final", exist_ok=True)
+os_module.makedirs("data/processed", exist_ok=True)
 
+# Import modules
 from config import Config
 from modules.data_processing import DataPreprocessor
 from modules.initialization import GMMInitializer
@@ -16,6 +20,7 @@ from modules.convergence import ConvergenceChecker
 from modules.clustering import GMMClustering
 from modules.visualization import GMMVisualization
 from modules.evaluation import GMMEvaluation
+from modules.documentation import GMMDocumentation
 
 
 def main():
@@ -35,7 +40,7 @@ def main():
     preprocessor = DataPreprocessor(config)
     data, numerical_cols, categorical_cols = preprocessor.get_preprocessed_data()
 
-    os.makedirs("data/processed", exist_ok=True)
+    os_module.makedirs("data/processed", exist_ok=True)
     data.to_csv("data/processed/preprocessed_data.csv", index=False)
 
     print("\n📁 Data Storage")
@@ -220,27 +225,25 @@ def main():
     # Step 1: Load preprocessed data
     # -------------------------------
     preprocessed_file = "data/processed/preprocessed_data.csv"
+
     try:
         data = pd.read_csv(preprocessed_file)
-        print(f"✅ Preprocessed data loaded from '{preprocessed_file}'")
-        print(f"   → Shape: {data.shape}\n")
     except FileNotFoundError:
-        print(f"❌ File not found: {preprocessed_file}")
-        exit()
+        raise FileNotFoundError(f"Missing file: {preprocessed_file}")
 
     X = data.values  # shape (N, D)
 
     # -------------------------------
     # Step 2: Initialize GMM Parameters
     # -------------------------------
-    K = 3  # Number of clusters
-    initializer = GMMInitializer(data)
-    means, covariances, weights = initializer.initialize_all(K, mean_method="kmeans", cov_method="identity")
+    K = 3  # number of clusters
 
-    print("✅ Initial GMM parameters set\n")
-    print(f"Initial Means:\n{means}\n")
-    print(f"Initial Weights:\n{weights}\n")
-    print(f"Initial Covariance of first cluster:\n{covariances[0]}\n")
+    initializer = GMMInitializer(data)
+    means, covariances, weights = initializer.initialize_all(
+        K,
+        mean_method="kmeans",
+        cov_method="identity"
+    )
 
     # -------------------------------
     # Step 3: Setup EM modules
@@ -251,43 +254,79 @@ def main():
 
     prev_log_likelihood = None
 
+    # IMPORTANT: define variables before loop
+    responsibilities = None
+    log_likelihood = None
+
     # -------------------------------
-    # Step 4: EM Algorithm Loop
-    # -------------------------------
-    print("🚀 Running EM Algorithm...\n")
+    # Step 4: Before EM Loop
+    # ------------------------------
+    # Before the EM loop, initialize the list
+    log_likelihoods = []
+
+    prev_log_likelihood = None
+
     for iteration in range(1, convergence_checker.max_iter + 1):
 
         # -------- E-STEP --------
-        gamma, log_likelihood = e_step.run_e_step(X, means, covariances, weights)
+        responsibilities, log_likelihood = e_step.run_e_step(X, means, covariances, weights)
+
+        # Save log-likelihood for later plotting/report
+        log_likelihoods.append(log_likelihood)
+
         print(f"Iteration {iteration}: Log-Likelihood (after E-Step) = {log_likelihood:.6f}")
 
         # -------- M-STEP --------
-        means, covariances, weights, log_likelihood = m_step.run_m_step(X, gamma)
+        means, covariances, weights, log_likelihood = m_step.run_m_step(X, responsibilities)
         print(f"Iteration {iteration}: Log-Likelihood (after M-Step) = {log_likelihood:.6f}")
-        print(f"Updated Weights (π_k): {weights}")
-        print(f"Updated Means (first 3 clusters):\n{means}\n")
 
-        # -------- Convergence Check --------
+        # Convergence check
         if convergence_checker.check_convergence(log_likelihood, prev_log_likelihood, iteration):
             break
 
         prev_log_likelihood = log_likelihood
 
     # -------------------------------
-    # Step 5: Save final parameters (optional)
+    # Step 5: EM Algorithm Loop
     # -------------------------------
-    # You can save means, covariances, weights, gamma if needed
-    # np.save("outputs/gmm_means.npy", means)
-    # np.save("outputs/gmm_covariances.npy", covariances)
-    # np.save("outputs/gmm_weights.npy", weights)
-    # np.save("outputs/gmm_responsibilities.npy", gamma)
+    for iteration in range(1, convergence_checker.max_iter + 1):
+
+        # -------- E-STEP --------
+        responsibilities, log_likelihood = e_step.run_e_step(
+            X, means, covariances, weights
+        )
+
+        # -------- M-STEP --------
+        means, covariances, weights, log_likelihood = m_step.run_m_step(
+            X, responsibilities
+        )
+
+        # -------- Convergence Check --------
+        if convergence_checker.check_convergence(
+            log_likelihood, prev_log_likelihood, iteration
+        ):
+            break
+
+        prev_log_likelihood = log_likelihood
 
     # -------------------------------
-    # Step 6: Plot convergence
+    # Step 6: Save final EM outputs
+    # -------------------------------
+    import os
+    os.makedirs("outputs/final", exist_ok=True)
+
+    np.save("outputs/final/responsibilities.npy", responsibilities)
+    np.save("outputs/final/cluster_labels.npy", np.argmax(responsibilities, axis=1))
+    np.save("outputs/final/final_means.npy", means)
+    np.save("outputs/final/final_covariances.npy", covariances)
+    np.save("outputs/final/final_weights.npy", weights)
+
+    # -------------------------------
+    # Step 7: Plot convergence
     # -------------------------------
     convergence_checker.plot_log_likelihood()
 
-    print("\n✅ EM Algorithm completed successfully!")
+    print("\nEM completed and outputs saved.")
     print("============================================================")
 
     print("============================================================")
@@ -391,45 +430,73 @@ def main():
     print("\n✅ Module 7 Visualization completed successfully")
     print("============================================================")
 
-    print("============================================================")
-    print("MODULE 8: EVALUATION MODULE")
-    print("============================================================\n")
 
-    # Load data
+    # Load preprocessed dataset
     data = pd.read_csv("data/processed/preprocessed_data.csv")
     X = data.values
 
-    # -------- Run small EM to get responsibilities --------
-    K = 3
-    e_step = GMMExpectation()
-    m_step = GMMMaximization()
+    base = "outputs/final"
 
-    means = X[:K]
-    covariances = np.array([np.cov(X.T) + np.eye(X.shape[1])*1e-6 for _ in range(K)])
-    weights = np.ones(K)/K
-    responsibilities = np.random.dirichlet(np.ones(K), size=X.shape[0])
+    # Required EM output files
+    files = {
+        "responsibilities": "responsibilities.npy",
+        "labels": "cluster_labels.npy",
+        "means": "final_means.npy",
+        "covs": "final_covariances.npy",
+        "weights": "final_weights.npy"
+    }
 
-    for _ in range(20):
-        means, covariances, weights, _ = m_step.run_m_step(X, responsibilities)
-        responsibilities, _ = e_step.run_e_step(X, means, covariances, weights)
+    for f in files.values():
+        path = os.path.join(base, f)
+        if not os.path.exists(path):
+            raise FileNotFoundError(path)
 
-    cluster_labels = np.argmax(responsibilities, axis=1)
+    # Load EM outputs
+    responsibilities = np.load(os.path.join(base, files["responsibilities"]))
+    labels = np.load(os.path.join(base, files["labels"]))
+    means = np.load(os.path.join(base, files["means"]))
+    covariances = np.load(os.path.join(base, files["covs"]))
+    weights = np.load(os.path.join(base, files["weights"]))
 
-    # -------- Evaluation --------
-    evaluator = GMMEvaluation(X)
+    # Evaluation
+    evaluator = GMMEvaluation(X, labels, responsibilities, means, covariances, weights)
 
-    # 1. Silhouette
-    evaluator.silhouette_score_gmm(cluster_labels)
+    sil = evaluator.silhouette()
+    bic, aic = evaluator.bic_aic()
+    gmm_sil, km_sil = evaluator.compare_with_kmeans()
 
-    # 2. BIC / AIC
-    evaluator.bic_aic_scores(k_range=range(1, 8))
+    print("Silhouette Score :", sil)
+    print("BIC :", bic)
+    print("AIC :", aic)
+    print("GMM Silhouette :", gmm_sil)
+    print("KMeans Silhouette :", km_sil)
 
-    # 3. Compare with KMeans
-    evaluator.compare_with_kmeans(cluster_labels, K=3)
 
-    print("\n✅ Module 8 Evaluation Completed Successfully")
-    print("============================================================")
+    # After EM, clustering, and evaluation steps
+    documentation = GMMDocumentation(output_dir="outputs/final")
 
+    # Example inputs from previous modules
+    # 'means', 'covariances', 'weights' are from EM
+    # 'cluster_labels' is np.argmax(responsibilities, axis=1)
+    # 'log_likelihoods' is list of log-likelihood values over EM iterations
+
+    # Cluster labels
+
+    documentation = GMMDocumentation(output_dir="outputs/final")
+
+    summary_file = documentation.generate_summary(
+        means=means,
+        covariances=covariances,
+        weights=weights,
+        log_likelihoods=log_likelihoods,
+        cluster_labels=cluster_labels
+    )
+
+    documentation.export_model(
+        means=means,
+        covariances=covariances,
+        weights=weights
+    )
 
 
     '''print("\n🚀 PIPELINE STATUS")

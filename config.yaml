@@ -1,5 +1,5 @@
 dataset:
-  path: "data/raw/Online-Retail.csv"
+  path: "data/raw/Mall_Customers.csv"
   delimiter: ","
   encoding: "utf-8"
 
