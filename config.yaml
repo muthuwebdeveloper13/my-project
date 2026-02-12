@@ -1,7 +1,8 @@
 dataset:
-  path: "data/raw/Mall_Customers.csv"
-  # path: "data/raw/dataset2.csv"
-  # path: "data/raw/Online-Retail.csv"
+  # path: "data/raw/Mall_Customers.csv"
+  # path: "data/raw/customer_segmentation_data.csv"
+  path: "data/raw/Test.csv"
+  # path: "data/raw/Online-Retail.csv"  # module - 8 loading time is more so remove the module 8
   delimiter: ","
   encoding: "utf-8"
 
@@ -16,6 +17,6 @@ preprocessing:
 
 clustering:
   n_components: 3
-  max_iterations: 100
+  max_iterations: 50
   tolerance: 0.001
   random_state: 42
